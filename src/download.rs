@@ -86,8 +86,9 @@ pub fn install_to_directory(
     let lib_path = Path::new("./libraries");
     std::fs::create_dir_all(&lib_path)?;
 
-    let lib_artifacts = get_needed_libraries(&version);
-    
+    let (mut lib_artifacts, mut nat_artifacts) = get_needed_libraries(&version);
+    lib_artifacts.append(&mut nat_artifacts);
+
     lib_artifacts.par_iter().for_each(|lib| {
         let path = lib.path.clone().unwrap();
         let mut path = lib_path.join(path);
@@ -157,10 +158,10 @@ struct HashData {
     size: u32,
 }
 
-pub fn get_needed_libraries(version: &MojangVersionData) -> Vec<Artifact>{
+pub fn get_needed_libraries(version: &MojangVersionData) -> (Vec<Artifact>, Vec<Artifact>){
     let os_name = String::from(OS_MAP[std::env::consts::OS]);
     let mut libs: Vec<Artifact> = Vec::new();
-
+    let mut nats: Vec<Artifact> = Vec::new();
 
     for lib in &version.libraries {
         let mut should_download_artifact = false;
@@ -219,7 +220,7 @@ pub fn get_needed_libraries(version: &MojangVersionData) -> Vec<Artifact>{
                 };
 
                 if let Some(classifier) = classifier {
-                    libs.push(classifier.clone());
+                    nats.push(classifier.clone());
                 }
             }
         
@@ -228,7 +229,7 @@ pub fn get_needed_libraries(version: &MojangVersionData) -> Vec<Artifact>{
 
 
 
-    libs
+    (libs, nats)
 }
 
 fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), InstallError> {
