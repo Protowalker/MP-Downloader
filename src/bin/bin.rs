@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
        return Ok(());
     }
 
-    let result = Box::new(reqwest::get(VER_MANIFEST)?
+    let result = Box::new(reqwest::blocking::get(VER_MANIFEST)?
         .json::<mc_data::MojangVersionManifest>()?);
 
     
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("downloading from {}", &version.url);
 
-    let result = Box::new(reqwest::get(&version.url[..])?
+    let result = Box::new(reqwest::blocking::get(&version.url[..])?
         .json::<mc_data::mojang_version_data::MojangVersionData>()?);
     
     let instance_path = std::path::Path::new("./installations").join(&*args[1]);
