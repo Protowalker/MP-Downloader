@@ -56,13 +56,13 @@ pub mod mojang_version_data {
         pub release_type: String,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Arguments {
         pub game: Vec<Or<String, Argument>>,
         pub jvm: Vec<Or<String, Argument>>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Argument {
         pub rules: Option<Vec<Rule>>,
         pub value: OrVec<String>,
@@ -70,18 +70,18 @@ pub mod mojang_version_data {
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct Logging {
-        client: LoggingConfig,
+        pub client: LoggingConfig,
     }
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct LoggingConfig {
-        argument: String,
-        file: File,
+        pub argument: String,
+        pub file: File,
         #[serde(rename = "type")]
-        file_type: String,
+        pub file_type: String,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Library {
         pub downloads: LibraryDownload,
         pub extract: Option<Extract>,
@@ -90,37 +90,37 @@ pub mod mojang_version_data {
         pub rules: Option<Vec<Rule>>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct LibraryDownload {
         pub classifiers: Option<Classifiers>,
         pub artifact: Option<Artifact>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Extract {
         exclude: Vec<String>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Natives {
         linux: Option<String>,
         osx: Option<String>,
         windows: Option<String>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Rule {
        pub action: String,
        pub os: Option<Os>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Os {
         pub name: Option<String>,
         pub arch: Option<String>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Classifiers {
         #[serde(rename = "natives-linux")]
         pub natives_linux: Option<Artifact>,
@@ -136,7 +136,7 @@ pub mod mojang_version_data {
         pub server: Artifact,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Artifact {
         pub path: Option<String>,
         pub sha1: String,

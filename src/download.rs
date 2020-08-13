@@ -2,6 +2,7 @@ use super::mc_data::mojang_version_data::{Artifact, MojangVersionData, Os};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use phf::phf_map;
+use rayon::prelude::*;
 
 const RESOURCE_URL: &str = "https://resources.download.minecraft.net";
 static OS_MAP: phf::Map<&'static str, &'static str> = phf_map! {
@@ -19,7 +20,7 @@ pub enum InstallError {
     JSONError(serde_json::error::Error),
 }
 
-pub async fn install_to_directory(
+pub fn install_to_directory(
     version: &MojangVersionData,
     directory: &Path,
 ) -> Result<(), InstallError> {
@@ -32,6 +33,7 @@ pub async fn install_to_directory(
     std::fs::create_dir_all(&assets_path.join("objects"))?;
     ///////////////
     std::fs::create_dir_all(&directory)?;
+    let client = reqwest::blocking::Client::new();
 
     let assets_filename = String::from(format!("{}{}", &version.assets, ".json"));
 
@@ -46,22 +48,19 @@ pub async fn install_to_directory(
             &version.asset_index.sha1,
             &*assets_path.join("indexes"),
             &assets_filename,
-            None,
+            Some(&client),
         )
-        .await?;
+        ?;
     }
 
     //if the objects folder isn't properly populated, create it
-    {
-        let client = reqwest::Client::new();
-
         let assets = std::fs::read_to_string(format!("./assets/indexes/{}", assets_filename))?;
         let objects: ResourceObjectData =
             serde_json::from_str::<ResourceData>(&assets[..])?.objects;
-        for (name, hash_data) in objects.extra.iter() {
+        objects.extra.par_iter().for_each(|(name, hash_data)| {
             //Files are stored in folders named with the first two characters in a hash.
             let dir = &assets_path.join("objects").join(&hash_data.hash[..2]);
-            std::fs::create_dir_all(dir)?;
+            std::fs::create_dir_all(dir).unwrap();
 
             //Does the file exist? If so, is the hash correct?
             let download_necessary = match std::fs::read(&dir.join(&hash_data.hash[..])) {
@@ -71,25 +70,97 @@ pub async fn install_to_directory(
             if download_necessary {
                 try_download_and_write(
                     &resource_url
-                        .join(&format!("{}/{}", &hash_data.hash[..2], &hash_data.hash[..])[..])?
+                        .join(&format!("{}/{}", &hash_data.hash[..2], &hash_data.hash[..])[..]).unwrap()
                         .to_string(),
                     &hash_data.hash,
                     &dir,
                     &hash_data.hash,
                     Some(&client),
-                )
-                .await?;
+                ).unwrap();
 
                 println!("downloaded {}", name);
             }
-        }
-    }
+        });
     //////
     //Next phase: installing libraries
     let lib_path = Path::new("./libraries");
     std::fs::create_dir_all(&lib_path)?;
 
+    let lib_artifacts = get_needed_libraries(&version);
+    
+    lib_artifacts.par_iter().for_each(|lib| {
+        let path = lib.path.clone().unwrap();
+        let mut path = lib_path.join(path);
+        let name = path.file_name()
+                        .unwrap_or(std::ffi::OsStr::new("THIS_IS_BAD_TELL_THE_DEV"))
+                        .to_str()
+                        .unwrap();
+        let name = String::from(name);
+        path.pop();
+        try_download_and_write(&lib.url,
+                               &lib.sha1, 
+                               &path, 
+                               &name,
+                               Some(&client)).unwrap();
+    });
+
+    try_download_and_write(&version.downloads.client.url, 
+                           &version.downloads.client.sha1, 
+                           &directory, 
+                           &String::from("client.jar"),
+                           Some(&client))?;
+    
+    let file = serde_json::to_string_pretty(version)?;
+    let file_path = directory.join("version_info.json");
+    let should_save_version = match std::fs::read_to_string(&file_path) {
+        Err(_) => true,
+        Ok(s) => s != file
+    };
+
+    if should_save_version {
+        std::fs::write(file_path, file)?;
+    }
+
+    //Download logger data
+    let file_path = directory.join("client.xml");
+    let should_get_logger = match std::fs::read(&file_path) {
+        Err(_) => true,
+        Ok(b) => sha1::Sha1::from(b).digest().to_string() != version.logging.client.file.sha1 
+    };
+    
+    if should_get_logger {
+        let logging_client = &version.logging.client;
+        try_download_and_write(&logging_client.file.url,
+                               &logging_client.file.sha1,
+                               &directory,
+                               &String::from("client.xml"),
+                               Some(&client))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct ResourceData {
+    objects: ResourceObjectData,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ResourceObjectData {
+    #[serde(flatten)]
+    extra: std::collections::HashMap<String, HashData>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HashData {
+    hash: String,
+    size: u32,
+}
+
+pub fn get_needed_libraries(version: &MojangVersionData) -> Vec<Artifact>{
     let os_name = String::from(OS_MAP[std::env::consts::OS]);
+    let mut libs: Vec<Artifact> = Vec::new();
+
 
     for lib in &version.libraries {
         let mut should_download_artifact = false;
@@ -114,6 +185,7 @@ pub async fn install_to_directory(
                             break;
                         }
                     }
+                    
                 }
                 if let Some(Os {
                     arch: Some(arch), ..
@@ -130,65 +202,36 @@ pub async fn install_to_directory(
         } else {
             should_download_artifact = true;
         }
-        //if there's an artifact, download it
+
+        //if there's an artifact, add it to the list and check for natives
         if should_download_artifact {
-            if let Some(download) = lib.downloads.artifact.as_ref() {
-                download_artifact(download, lib_path).await?;
+            if let Some(library) = &lib.downloads.artifact {
+                libs.push(library.clone());
             }
-        }
-        //if there are any platform-specific artifacts (classifiers,) download those as well
-        if let Some(classifiers) = &lib.downloads.classifiers {
-            let classifier = match &*os_name {
-                "osx" => &classifiers.natives_osx,
-                "windows" => &classifiers.natives_windows,
-                "linux" => &classifiers.natives_linux,
-                _ => &None,
-            };
+        
+            //if there are any platform-specific artifacts (classifiers,) download those as well
+            if let Some(classifiers) = &lib.downloads.classifiers {
+                let classifier = match &*os_name {
+                    "osx" => &classifiers.natives_osx,
+                    "windows" => &classifiers.natives_windows,
+                    "linux" => &classifiers.natives_linux,
+                    _ => &None,
+                };
 
-            if let Some(classifier) = classifier {
-                download_artifact(classifier, lib_path).await?;
+                if let Some(classifier) = classifier {
+                    libs.push(classifier.clone());
+                }
             }
+        
         }
     }
 
-    try_download_and_write(&version.downloads.client.url, 
-                           &version.downloads.client.sha1, 
-                           &directory, 
-                           &String::from("client.jar"),
-                           None).await?;
-    
-    let file = serde_json::to_string_pretty(version)?;
-    let file_path = directory.join("version_info.json");
-    let should_save_version = match std::fs::read_to_string(file_path) {
-        Err(_) => true,
-        Ok(b) => b == file
-    };
 
-    if should_save_version {
-        std::fs::write(directory.join("version_info.json"), file)?;
-    }
 
-    Ok(())
+    libs
 }
 
-#[derive(Serialize, Deserialize)]
-struct ResourceData {
-    objects: ResourceObjectData,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ResourceObjectData {
-    #[serde(flatten)]
-    extra: std::collections::HashMap<String, HashData>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct HashData {
-    hash: String,
-    size: u32,
-}
-
-async fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), InstallError> {
+fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), InstallError> {
 
     let mut path: Vec<&str> = artifact.path.as_ref().unwrap().split("/").collect();
 
@@ -205,32 +248,33 @@ async fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), I
     }
     std::fs::create_dir_all(&path)?;
 
-    try_download_and_write(&artifact.url, &artifact.sha1, &path, &file_name, None).await?;
+    try_download_and_write(&artifact.url, &artifact.sha1, &path, &file_name, None)?;
     println!("downloaded {}", file_name);
     Ok(())
 }
 
-async fn try_download_and_write(
+fn try_download_and_write(
     url: &String,
     hash: &String,
     dir: &Path,
     name: &String,
-    client: Option<&reqwest::Client>,
+    client: Option<&reqwest::blocking::Client>,
 ) -> Result<(), InstallError> {
-    let result = download_and_check(url, hash, client).await?;
+    let result = download_and_check(url, hash, client)?;
+    std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join(name), result)?;
     Ok(())
 }
 
-async fn download_and_check(
+fn download_and_check(
     url: &String,
     hash: &String,
-    client: Option<&reqwest::Client>,
+    client: Option<&reqwest::blocking::Client>,
 ) -> Result<Vec<u8>, InstallError> {
     let result = match client {
-        None => reqwest::get(&url[..]).await?.bytes().await?,
-        Some(client) => client.get(url).send().await?.bytes().await?,
-    };
+        None => reqwest::blocking::get(&url[..])?.bytes(),
+        Some(client) => client.get(url).send()?.bytes(),
+    }?;
 
     if sha1::Sha1::from(&result).digest().to_string() != *hash {
         return Err(InstallError::HashError(url.to_string()));
