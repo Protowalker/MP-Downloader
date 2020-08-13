@@ -305,3 +305,31 @@ impl From<url::ParseError> for InstallError {
         Self::URLError(error)
     }
 }
+
+
+use std::fmt;
+impl fmt::Display for InstallError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WebError(e) => e.fmt(f)?,
+            Self::URLError(e) => e.fmt(f)?,
+            Self::JSONError(e) => e.fmt(f)?,
+            Self::IOError(e) => e.fmt(f)?,
+            Self::HashError(e) => e.fmt(f)?,
+        }
+        write!(f, "")
+    }
+}
+
+use std::error::Error;
+impl Error for InstallError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::WebError(e) => e.source(),
+            Self::URLError(e) => e.source(),
+            Self::JSONError(e) => e.source(),
+            Self::IOError(e) => e.source(),
+            Self::HashError(e) => None,
+        }
+    }
+}

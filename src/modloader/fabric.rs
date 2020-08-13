@@ -1,5 +1,6 @@
 use std::path::Path;
 use serde::{Serialize, Deserialize};
+use super::super::types::{Or, Or::{First, Second}};
 
 const VERSION_URL: &str = "https://meta.fabricmc.net/v2/versions";
 pub enum Stability {
@@ -8,8 +9,19 @@ pub enum Stability {
     Both
 }
 
-pub fn install_fabric_at_instance(build: &FabricBuild, instance_dir: &Path) {
-    
+pub fn install_fabric_at_instance(build: FabricBuild, instance_dir: &Path) {
+    let lib_path = Path::new("./libraries");
+    let libraries = build.launcher_meta.libraries;
+    let libraries: Vec<FabricLibrary> = libraries.client.into_iter()
+                    .chain(libraries.common.into_iter())
+                    .collect();
+
+    for lib in libraries.iter() {
+        //TODO: Parse and install libraries from fabric
+    }
+
+    //TODO: create file for launcher to parse with changed class_path
+    //and such
 }
 
 pub fn get_fabric_builds_from_version(version: &FabricGameVersion, stability: Stability ) -> Result<Vec<FabricBuild>, reqwest::Error> {
@@ -57,7 +69,7 @@ pub struct FabricBuildMeta {
     version: u16,
     libraries: FabricBuildLibraries,
     #[serde(alias = "mainClass")]
-    main_class: FabricMainClass
+    main_class: Or<FabricMainClass, String>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -76,7 +88,7 @@ pub struct FabricBuildLibraries {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FabricLibrary {
     name: String,
-    url: String
+    url: Option<String>
 }
 
 pub fn get_game_versions(stability: Stability) -> Result<Vec<FabricGameVersion>, reqwest::Error> {

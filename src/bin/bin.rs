@@ -5,6 +5,8 @@ extern crate url;
 extern crate downloader;
 
 use downloader::{mc_data, download};
+use downloader::modloader::fabric;
+use downloader::modloader::fabric::Stability;
 
 const VER_MANIFEST: &str = "https://launchermeta.mojang.com/mc/game/version_manifest.json";
 
@@ -27,6 +29,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .json::<mc_data::mojang_version_data::MojangVersionData>()?);
     
     let instance_path = std::path::Path::new("./installations").join(&*args[1]);
+    
+    download::install_to_directory(&result, &instance_path)?;
+
+    let versions = fabric::get_game_versions(Stability::Stable)?;
+    let fabric_build = versions.iter()
+                                   .find(|ver| ver.version == String::from(&*args[1]));
+
+    if let None = fabric_build {
+        println!("No fabric builds found for {}", &*args[1]);
+    } else if let Some(fabric_build) = fabric_build {
+        let fabric_version = fabric::get_fabric_builds_from_version(&fabric_build, Stability::Stable)?.remove(0);
+        println!("{:#?}", fabric_version);
+        fabric::install_fabric_at_instance(&fabric_version, &instance_path);
+    }
+
 
     Ok(())
 }
