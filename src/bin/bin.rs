@@ -23,26 +23,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let version = result.look_up_version(String::from(&*args[1])).unwrap();
     
-    println!("downloading from {}", &version.url);
 
     let result = Box::new(reqwest::blocking::get(&version.url[..])?
         .json::<mc_data::mojang_version_data::MojangVersionData>()?);
     
     let instance_path = std::path::Path::new("./installations").join(&*args[1]);
     
-    download::install_to_directory(&result, &instance_path)?;
-
     let versions = fabric::get_game_versions(Stability::Stable)?;
     let fabric_build = versions.iter()
                                    .find(|ver| ver.version == String::from(&*args[1]));
 
-    if let None = fabric_build {
+    let fabric_version = if let Some(fabric_build) = fabric_build {
+        fabric::get_fabric_builds_from_version(&fabric_build, Stability::Stable)?.remove(0)
+    } else {
         println!("No fabric builds found for {}", &*args[1]);
-    } else if let Some(fabric_build) = fabric_build {
-        let fabric_version = fabric::get_fabric_builds_from_version(&fabric_build, Stability::Stable)?.remove(0);
-        println!("{:#?}", fabric_version);
-        fabric::install_fabric_at_instance(&fabric_version, &instance_path);
-    }
+        return Ok(());
+    };
+
+    println!("downloading from {}", &version.url);
+    download::install_to_directory(&result, &instance_path)?;
+
+    fabric::install_fabric_at_instance(fabric_version, &instance_path);
+
 
 
     Ok(())

@@ -133,7 +133,7 @@ pub mod mojang_version_data {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct Downloads {
         pub client: Artifact,
-        pub server: Artifact,
+        pub server: Option<Artifact>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]

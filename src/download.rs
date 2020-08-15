@@ -45,7 +45,6 @@ pub fn install_to_directory(
     ) {
         try_download_and_write(
             &version.asset_index.url,
-            &version.asset_index.sha1,
             &*assets_path.join("indexes"),
             &assets_filename,
             Some(&client),
@@ -72,7 +71,6 @@ pub fn install_to_directory(
                     &resource_url
                         .join(&format!("{}/{}", &hash_data.hash[..2], &hash_data.hash[..])[..]).unwrap()
                         .to_string(),
-                    &hash_data.hash,
                     &dir,
                     &hash_data.hash,
                     Some(&client),
@@ -99,14 +97,12 @@ pub fn install_to_directory(
         let name = String::from(name);
         path.pop();
         try_download_and_write(&lib.url,
-                               &lib.sha1, 
                                &path, 
                                &name,
                                Some(&client)).unwrap();
     });
 
     try_download_and_write(&version.downloads.client.url, 
-                           &version.downloads.client.sha1, 
                            &directory, 
                            &String::from("client.jar"),
                            Some(&client))?;
@@ -132,7 +128,6 @@ pub fn install_to_directory(
     if should_get_logger {
         let logging_client = &version.logging.client;
         try_download_and_write(&logging_client.file.url,
-                               &logging_client.file.sha1,
                                &directory,
                                &String::from("client.xml"),
                                Some(&client))?;
@@ -232,7 +227,7 @@ pub fn get_needed_libraries(version: &MojangVersionData) -> (Vec<Artifact>, Vec<
     (libs, nats)
 }
 
-fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), InstallError> {
+fn _download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), InstallError> {
 
     let mut path: Vec<&str> = artifact.path.as_ref().unwrap().split("/").collect();
 
@@ -249,19 +244,18 @@ fn download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), Install
     }
     std::fs::create_dir_all(&path)?;
 
-    try_download_and_write(&artifact.url, &artifact.sha1, &path, &file_name, None)?;
+    try_download_and_write(&artifact.url, &path, &file_name, None)?;
     println!("downloaded {}", file_name);
     Ok(())
 }
 
 fn try_download_and_write(
     url: &String,
-    hash: &String,
     dir: &Path,
     name: &String,
     client: Option<&reqwest::blocking::Client>,
 ) -> Result<(), InstallError> {
-    let result = download_and_check(url, hash, client)?;
+    let result = download_and_check(url, client)?;
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join(name), result)?;
     Ok(())
@@ -269,7 +263,6 @@ fn try_download_and_write(
 
 fn download_and_check(
     url: &String,
-    hash: &String,
     client: Option<&reqwest::blocking::Client>,
 ) -> Result<Vec<u8>, InstallError> {
     let result = match client {
@@ -277,9 +270,6 @@ fn download_and_check(
         Some(client) => client.get(url).send()?.bytes(),
     }?;
 
-    if sha1::Sha1::from(&result).digest().to_string() != *hash {
-        return Err(InstallError::HashError(url.to_string()));
-    }
     Ok(result.iter().map(|v| -> u8 { *v }).collect())
 }
 
