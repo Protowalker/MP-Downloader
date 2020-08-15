@@ -249,7 +249,7 @@ fn _download_artifact(artifact: &Artifact, lib_path: &Path) -> Result<(), Instal
     Ok(())
 }
 
-fn try_download_and_write(
+pub fn try_download_and_write(
     url: &String,
     dir: &Path,
     name: &String,

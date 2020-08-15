@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("downloading from {}", &version.url);
     download::install_to_directory(&result, &instance_path)?;
 
-    fabric::install_fabric_at_instance(fabric_version, &instance_path);
+    fabric::install_fabric_at_instance(fabric_version, &instance_path)?;
 
 
 
