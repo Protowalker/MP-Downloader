@@ -50,12 +50,12 @@ pub fn install_fabric_at_instance(build: FabricBuild, instance_dir: &Path) -> Re
 
             let hash_url = reqwest::Url::parse(&format!("{}/{}.jar.sha1", url, filename))?;
             let hash = reqwest::blocking::get(hash_url)?
-                                         .bytes()?;
+                                         .text()?;
             
             let lib_location = lib_path.join(path).join(id).join(version);
-            let should_download = match std::fs::read(&lib_location.with_file_name(format!("{}.jar", filename))) {
+            let should_download = match std::fs::read(&lib_location.join(format!("{}.jar", filename))) {
                 Err(_) => true,
-                Ok(b) => sha1::Sha1::from(b).digest().bytes().to_vec() == hash
+                Ok(b) => sha1::Sha1::from(b).digest().to_string() != hash
             };
 
             if should_download {
@@ -98,11 +98,11 @@ pub struct FabricBuild {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FabricBuildLoader {
-    separator: String,
-    build: u32,
-    maven: String,
-    version: String,
-    stable: bool
+    pub separator: String,
+    pub build: u32,
+    pub maven: String,
+    pub version: String,
+    pub stable: bool
 }
 
 #[derive(Serialize, Deserialize, Debug)]
